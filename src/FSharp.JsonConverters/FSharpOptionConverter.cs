@@ -7,7 +7,7 @@ using Microsoft.FSharp.Core;
 
 namespace FSharp.JsonConverters
 {
-    public class OptionConverter :JsonConverterFactory
+    public class FSharpOptionConverter :JsonConverterFactory
     {
         private class InnerOptionConverter<T> : JsonConverter<FSharpOption<T>>
         {
