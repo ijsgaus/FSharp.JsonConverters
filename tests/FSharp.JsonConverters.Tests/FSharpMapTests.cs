@@ -7,9 +7,11 @@ namespace FSharp.JsonConverters.Tests
 {
     public class FSharpMapTests
     {
+        
+
         private static JsonSerializerOptions Options = new JsonSerializerOptions
         {
-            Converters = { new FSharpMapConverter() }
+            Converters = { new FSharpMapConverter(true) }
         };
         
         [Test]
