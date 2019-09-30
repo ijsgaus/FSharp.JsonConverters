@@ -11,7 +11,9 @@ namespace FSharp.JsonConverters.Tests
 
         private static JsonSerializerOptions Options = new JsonSerializerOptions
         {
-            Converters = { new FSharpMapConverter(true) }
+            Converters = { new FSharpMapConverter(false) },
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DictionaryKeyPolicy = JsonNamingPolicy.CamelCase
         };
         
         [Test]

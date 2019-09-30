@@ -38,7 +38,7 @@ namespace FSharp.JsonConverters
                 writer.WriteStartObject();
                 foreach (var item in value)
                 {
-                   writer.WritePropertyName(item.Key); 
+                   writer.WritePropertyName(options.DictionaryKeyPolicy.ConvertName(item.Key)); 
                    JsonSerializer.Serialize(writer, item.Value, options);
                 }
                 writer.WriteEndObject();
@@ -87,11 +87,37 @@ namespace FSharp.JsonConverters
                     {
                         if (reader.TokenType != JsonTokenType.StartObject)
                             throw new JsonException("Must be a object");
+                        TKey key = default;
+                        TValue value = default;
                         reader.Read();
+                        var prop = reader.GetString(); 
                         reader.Read();
-                        var key = JsonSerializer.Deserialize<TKey>(ref reader, options);
+                        switch (prop.ToLower())
+                        {
+                            case "item1":
+                                key = JsonSerializer.Deserialize<TKey>(ref reader, options);
+                                break;
+                            case "item2":
+                                value = JsonSerializer.Deserialize<TValue>(ref reader, options);
+                                break;
+                            default:
+                                throw new JsonException("Invalid property name");
+                        }
+
                         reader.Read();
-                        var value = JsonSerializer.Deserialize<TValue>(ref reader, options);
+                        prop = reader.GetString();
+                        reader.Read();
+                        switch (prop.ToLower())
+                        {
+                            case "item1":
+                                key = JsonSerializer.Deserialize<TKey>(ref reader, options);
+                                break;
+                            case "item2":
+                                value = JsonSerializer.Deserialize<TValue>(ref reader, options);
+                                break;
+                            default:
+                                throw new JsonException("Invalid property name");
+                        }
                         reader.Read();
                         map = map.Add(key, value);
                         reader.Read();
@@ -121,9 +147,9 @@ namespace FSharp.JsonConverters
                     foreach (var item in value)
                     {
                         writer.WriteStartObject();
-                        writer.WritePropertyName("Item1");
+                        writer.WritePropertyName(options.PropertyNamingPolicy.ConvertName("Item1"));
                         JsonSerializer.Serialize(writer, item.Key, options);
-                        writer.WritePropertyName("Item2");
+                        writer.WritePropertyName(options.PropertyNamingPolicy.ConvertName("Item2"));
                         JsonSerializer.Serialize(writer, item.Value, options);
                         writer.WriteEndObject();
                     }
