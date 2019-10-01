@@ -10,27 +10,24 @@ namespace FSharp.JsonConverters
 {
     public class FSharpMapConverter : JsonConverterFactory
     {
-        private readonly bool _useArrayTuple;
-
-        public FSharpMapConverter(bool useArrayTuple = false)
+        public FSharpMapConverter()
         {
-            _useArrayTuple = useArrayTuple;
+            
         }
         
-        private class InnerStringConverter<T> : JsonConverter<FSharpMap<string, T>>
+        private class JsonMapConverter<T> : JsonConverter<FSharpMap<string, T>>
         {
             public override FSharpMap<string, T> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {    
-                if (reader.TokenType != JsonTokenType.StartObject)
-                    throw new JsonException("Must be a object");
-                var map = MapModule.Empty<string, T>();
-                reader.Read();
-                while (reader.TokenType != JsonTokenType.EndObject)
+                try
                 {
-                    map = map.Add(reader.GetString(), JsonSerializer.Deserialize<T>(ref reader, options));
-                    reader.Read();
+                    return MapModule.OfSeq(reader.DeserializeMapAsTuples<T>(options));
                 }
-                return map;
+                catch (Exception ex)
+                {
+                    throw new JsonException(
+                        $"Error when deserialize FSharpMap<string, {typeof(T).Name}>", ex);
+                }
             }
 
             public override void Write(Utf8JsonWriter writer, FSharpMap<string, T> value, JsonSerializerOptions options)
@@ -45,138 +42,48 @@ namespace FSharp.JsonConverters
             }
         }
         
-        private class InnerConverter<TKey, TValue> : JsonConverter<FSharpMap<TKey, TValue>>
+        private class JsonArrayOfTuples<TKey, TValue> : JsonConverter<FSharpMap<TKey, TValue>>
         {
-            private readonly bool _useArrayTuple;
-
-            public InnerConverter(bool useArrayTuple)
+            public override FSharpMap<TKey, TValue> Read(ref Utf8JsonReader reader, Type typeToConvert,
+                JsonSerializerOptions options)
             {
-                _useArrayTuple = useArrayTuple;
+                try
+                {
+                    return MapModule.OfSeq(reader.DeserializeArray<Tuple<TKey, TValue>>(options));
+                }
+                catch (Exception ex)
+                {
+                    throw new JsonException(
+                        $"Error when deserialize FSharpMap<{typeof(TKey).Name},{typeof(TValue).Name}>", ex);
+                }
             }
 
-            public override FSharpMap<TKey, TValue> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            {
-                if (_useArrayTuple)
-                {
-                    if (reader.TokenType != JsonTokenType.StartArray)
-                        throw new JsonException("Must be a array");
-                    var map = MapModule.Empty<TKey, TValue>();
-                    reader.Read();
-                    while (reader.TokenType != JsonTokenType.EndArray)
-                    {
-                        if (reader.TokenType != JsonTokenType.StartArray)
-                            throw new JsonException("Must be a array");
-                        reader.Read();
-                        var key = JsonSerializer.Deserialize<TKey>(ref reader, options);
-                        reader.Read();
-                        var value = JsonSerializer.Deserialize<TValue>(ref reader, options);
-                        reader.Read();
-                        reader.Read();
-                        
-                        map = map.Add(key, value);
-                    }
-                    return map;
-                }
-                else
-                {
-                    if (reader.TokenType != JsonTokenType.StartArray)
-                        throw new JsonException("Must be a array");
-                    var map = MapModule.Empty<TKey, TValue>();
-                    reader.Read();
-                    while (reader.TokenType != JsonTokenType.EndArray)
-                    {
-                        if (reader.TokenType != JsonTokenType.StartObject)
-                            throw new JsonException("Must be a object");
-                        TKey key = default;
-                        TValue value = default;
-                        reader.Read();
-                        var prop = reader.GetString(); 
-                        reader.Read();
-                        switch (prop.ToLower())
-                        {
-                            case "item1":
-                                key = JsonSerializer.Deserialize<TKey>(ref reader, options);
-                                break;
-                            case "item2":
-                                value = JsonSerializer.Deserialize<TValue>(ref reader, options);
-                                break;
-                            default:
-                                throw new JsonException("Invalid property name");
-                        }
 
-                        reader.Read();
-                        prop = reader.GetString();
-                        reader.Read();
-                        switch (prop.ToLower())
-                        {
-                            case "item1":
-                                key = JsonSerializer.Deserialize<TKey>(ref reader, options);
-                                break;
-                            case "item2":
-                                value = JsonSerializer.Deserialize<TValue>(ref reader, options);
-                                break;
-                            default:
-                                throw new JsonException("Invalid property name");
-                        }
-                        reader.Read();
-                        map = map.Add(key, value);
-                        reader.Read();
-                    }
-                    return map;
-                }
-                
-            }
-
-            public override void Write(Utf8JsonWriter writer, FSharpMap<TKey, TValue> value, JsonSerializerOptions options)
-            {
-                if (_useArrayTuple)
-                {
-                    writer.WriteStartArray();
-                    foreach (var item in value)
-                    {
-                        writer.WriteStartArray();
-                        JsonSerializer.Serialize(writer, item.Key, options);
-                        JsonSerializer.Serialize(writer, item.Value, options);
-                        writer.WriteEndArray();
-                    }
-                    writer.WriteEndArray();
-                }
-                else
-                {
-                    writer.WriteStartArray();
-                    foreach (var item in value)
-                    {
-                        writer.WriteStartObject();
-                        writer.WritePropertyName(options.PropertyNamingPolicy.ConvertName("Item1"));
-                        JsonSerializer.Serialize(writer, item.Key, options);
-                        writer.WritePropertyName(options.PropertyNamingPolicy.ConvertName("Item2"));
-                        JsonSerializer.Serialize(writer, item.Value, options);
-                        writer.WriteEndObject();
-                    }
-                    writer.WriteEndArray();
-                }
-            }
+            public override void Write(Utf8JsonWriter writer, FSharpMap<TKey, TValue> value,
+                JsonSerializerOptions options)
+                => writer.SerializeToArray(MapModule.ToSeq(value), options);
         }
         
-        private static readonly Type GenericStringType = typeof(InnerStringConverter<>);
-        private static readonly Type GenericType = typeof(InnerConverter<,>);
         
-        private static readonly ConcurrentDictionary<Type, JsonConverter> Cache = new ConcurrentDictionary<Type, JsonConverter>();
+
+
+
+        private static readonly Type JsonMapConverterType = typeof(JsonMapConverter<>);
+        private static readonly Type JsonArrayOfTuplesType = typeof(JsonArrayOfTuples<,>);
         
         public override bool CanConvert(Type typeToConvert)
-            =>  typeToConvert.IsGenericType && typeToConvert.IsConstructedGenericType &&
-                typeToConvert.GetGenericTypeDefinition() == typeof(FSharpMap<,>);
+            =>  typeToConvert.IsConstructedGeneric(typeof(FSharpMap<,>));
 
         private JsonConverter MakeConverter(Type type)
             =>
                 type.GenericTypeArguments[0] == typeof(string)
                     ? (JsonConverter) Activator.CreateInstance(
-                        GenericStringType.MakeGenericType(type.GenericTypeArguments[1]))
-                    : (JsonConverter) Activator.CreateInstance(GenericType.MakeGenericType(type.GenericTypeArguments[0], type.GenericTypeArguments[1]), new object[] {_useArrayTuple});
-        
-        
+                        JsonMapConverterType.MakeGenericType(type.GenericTypeArguments[1]))
+                    : (JsonConverter) Activator.CreateInstance(
+                            JsonArrayOfTuplesType.MakeGenericType(type.GenericTypeArguments[0],
+                                type.GenericTypeArguments[1]));
         
         public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
-            => Cache.GetOrAdd(typeToConvert, MakeConverter);
+            => MakeConverter(typeToConvert);
     }
 }
